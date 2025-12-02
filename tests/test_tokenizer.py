@@ -221,7 +221,9 @@ def test_roundtrip_unicode_string_with_special_tokens():
         vocab_path=VOCAB_PATH, merges_path=MERGES_PATH, special_tokens=["<|endoftext|>"]
     )
     test_string = "Héllò hôw <|endoftext|><|endoftext|> are ü? 🙃<|endoftext|>"
+    
     encoded_ids = tokenizer.encode(test_string)
+        
     tokenized_string = [tokenizer.decode([x]) for x in encoded_ids]
     # Ensure the special <|endoftext|> token is preserved
     assert tokenized_string.count("<|endoftext|>") == 3
@@ -249,7 +251,7 @@ def test_overlapping_special_tokens():
     tokenizer = get_tokenizer_from_vocab_merges_path(
         vocab_path=VOCAB_PATH,
         merges_path=MERGES_PATH,
-        special_tokens=["<|endoftext|>", "<|endoftext|><|endoftext|>"],
+        special_tokens=["<|endoftext|>", "<|endoftext|><|endoftext|>"], 
     )
     test_string = "Hello, how <|endoftext|><|endoftext|> are you?<|endoftext|>"
 
@@ -269,7 +271,7 @@ def test_address_roundtrip():
     )
     with open(FIXTURES_PATH / "address.txt") as f:
         corpus_contents = f.read()
-
+    
     ids = tokenizer.encode(corpus_contents)
     assert tokenizer.decode(ids) == corpus_contents
 
@@ -374,6 +376,8 @@ def test_encode_special_token_double_newline_non_whitespace():
         corpus_contents = f.read()
     reference_ids = reference_tokenizer.encode(corpus_contents, allowed_special={"<|endoftext|>"})
     ids = tokenizer.encode(corpus_contents)
+    #print(tokenizer.vocab[628], tokenizer.vocab[198])
+    #print(tokenizer.merges)
     assert ids == reference_ids
 
     assert tokenizer.decode(ids) == corpus_contents

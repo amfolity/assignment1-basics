@@ -45,7 +45,7 @@ def gpt2_bytes_to_unicode() -> dict[int, str]:
     for b in range(2**8):
         if b not in bs:
             # If this integer isn't in our list of visually-representable
-            # charcters, then map it to the next nice character (offset by 256)
+            # characters, then map it to the next nice character (offset by 256)
             bs.append(b)
             cs.append(2**8 + n)
             n += 1
