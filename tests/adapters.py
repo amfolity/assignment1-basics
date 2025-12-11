@@ -9,7 +9,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 import math
-from .model import Linear, Embedding, RMSNorm, Pointwise_Feedforward, silu_act, RoPE
+from .model import (Linear, Embedding, RMSNorm, Pointwise_Feedforward, silu_act, RoPE, scaled_dot_product_attention, MultiHeadSelfAttention, transformer_block, MultiHeadSelfAttentionWithRope)
 from .utils import softmax
 
 def run_linear(
@@ -112,13 +112,13 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    score = Q @ torch.transpose(K, -1, -2)
-    if mask is not None:
-        score[torch.logical_not(mask)] = -float('inf')
-    score /= math.sqrt(Q.shape[-1])
-    #return torch.softmax(score, axis=-1) @ V
-    return run_softmax(score, -1) @ V
-
+    ##score = Q @ torch.transpose(K, -1, -2)
+    #if mask is not None:
+    #    score[torch.logical_not(mask)] = -float('inf')
+    #score /= math.sqrt(Q.shape[-1])
+    ##return torch.softmax(score, axis=-1) @ V
+    #return run_softmax(score, -1) @ V
+    return scaled_dot_product_attention(Q, K, V, mask)
 
 def run_multihead_self_attention(
     d_model: int,
@@ -151,16 +151,24 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    hidden_shape = (*(in_features.shape[:-1]), num_heads, -1)
-    Q = (in_features @ q_proj_weight.T).view(hidden_shape).transpose(-2, -3)
-    K = (in_features @ k_proj_weight.T).view(hidden_shape).transpose(-2, -3)
-    V = (in_features @ v_proj_weight.T).view(hidden_shape).transpose(-2, -3)
-    mask = torch.ones(*Q.shape[:-1], K.shape[-2], dtype=torch.bool)
-    mask = torch.logical_not(torch.triu(mask, diagonal=1))
-    res = run_scaled_dot_product_attention(Q, K, V, mask)
-    output_shape = ((*in_features.shape[:-1], -1))
-    res = res.transpose(-2,-3).reshape(output_shape).contiguous()
-    return res @ o_proj_weight.T
+    #hidden_shape = (*(in_features.shape[:-1]), num_heads, -1)
+    #Q = (in_features @ q_proj_weight.T).view(hidden_shape).transpose(-2, -3)
+    #K = (in_features @ k_proj_weight.T).view(hidden_shape).transpose(-2, -3)
+    #V = (in_features @ v_proj_weight.T).view(hidden_shape).transpose(-2, -3)
+    #mask = torch.ones(*Q.shape[:-1], K.shape[-2], dtype=torch.bool)
+    #mask = torch.logical_not(torch.triu(mask, diagonal=1))
+    #res = run_scaled_dot_product_attention(Q, K, V, mask)
+    #output_shape = ((*in_features.shape[:-1], -1))
+    #res = res.transpose(-2,-3).reshape(output_shape).contiguous()
+    #return res @ o_proj_weight.T
+    attention = MultiHeadSelfAttention(d_model, num_heads)
+    attention.load_state_dict({"q_proj.weight" : q_proj_weight, 
+                               "k_proj.weight" : k_proj_weight, 
+                               "v_proj.weight" : v_proj_weight, 
+                               "o_proj.weight": o_proj_weight,
+                              })
+    return attention(in_features)
+    
 
 
 def run_multihead_self_attention_with_rope(
@@ -200,19 +208,26 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    hidden_shape = (*(in_features.shape[:-1]), num_heads, -1)
-    Q = (in_features @ q_proj_weight.T).view(hidden_shape).transpose(-2, -3)
-    Q = run_rope(Q.shape[-1], theta, max_seq_len, Q, token_positions)
-    K = (in_features @ k_proj_weight.T).view(hidden_shape).transpose(-2, -3)
-    K = run_rope(K.shape[-1], theta, max_seq_len, K, token_positions)
-    V = (in_features @ v_proj_weight.T).view(hidden_shape).transpose(-2, -3)
-    mask = torch.ones(*Q.shape[:-1], K.shape[-2], dtype=torch.bool)
-    mask = torch.logical_not(torch.triu(mask, diagonal=1))
+    #hidden_shape = (*(in_features.shape[:-1]), num_heads, -1)
+    #Q = (in_features @ q_proj_weight.T).view(hidden_shape).transpose(-2, -3)
+    #Q = run_rope(Q.shape[-1], theta, max_seq_len, Q, token_positions)
+    #K = (in_features @ k_proj_weight.T).view(hidden_shape).transpose(-2, -3)
+    #K = run_rope(K.shape[-1], theta, max_seq_len, K, token_positions)
+    #V = (in_features @ v_proj_weight.T).view(hidden_shape).transpose(-2, -3)
+    #mask = torch.ones(*Q.shape[:-1], K.shape[-2], dtype=torch.bool)
+    #mask = torch.logical_not(torch.triu(mask, diagonal=1))
     
-    res = run_scaled_dot_product_attention(Q, K, V, mask)
-    output_shape = ((*in_features.shape[:-1], -1))
-    res = res.transpose(-2,-3).reshape(output_shape).contiguous()
-    return res @ o_proj_weight.T
+    #res = run_scaled_dot_product_attention(Q, K, V, mask)
+    #output_shape = ((*in_features.shape[:-1], -1))
+    #res = res.transpose(-2,-3).reshape(output_shape).contiguous()
+    #return res @ o_proj_weight.T
+    attention = MultiHeadSelfAttentionWithRope(d_model, num_heads, max_seq_len, theta)
+    attention.load_state_dict({"q_proj.weight" : q_proj_weight, 
+                               "k_proj.weight" : k_proj_weight, 
+                               "v_proj.weight" : v_proj_weight, 
+                               "o_proj.weight": o_proj_weight,
+                              })
+    return attention(in_features, token_positions)    
 
 
 def run_rope(
@@ -322,45 +337,50 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    in_features_orig = in_features.clone()
+#    in_features_orig = in_features.clone()
+#    
+#    x = run_rmsnorm(
+#        d_model,
+#        1e-5,
+#        weights['ln1.weight'],
+#        in_features,
+#    )
+#    token_positions = torch.arange(in_features.shape[-2])[None, :]
+#    attn1 = run_multihead_self_attention_with_rope(
+#        d_model,
+#        num_heads,
+#        max_seq_len,
+#        theta,
+#        weights['attn.q_proj.weight'],
+#        weights['attn.k_proj.weight'],
+#        weights['attn.v_proj.weight'],
+#        weights['attn.output_proj.weight'],
+#        x,
+#        token_positions,
+#    )
+#    ll1_out = in_features_orig + attn1    
+#    ll1_out_orig = ll1_out.clone()
+#    
+#    x2 = run_rmsnorm(
+#        d_model,
+#        1e-5,
+#        weights['ln2.weight'],
+#        ll1_out,
+#    )
+#    ffn = run_swiglu(
+#        d_model,
+#        d_ff,
+#        weights['ffn.w1.weight'],
+#        weights['ffn.w2.weight'],
+#        weights['ffn.w3.weight'],
+#        x2,
+#    )
+#    return ffn + ll1_out_orig
+
+    transformer_block = transformer_block(d_model, d_ff, silu_act)
+    transformer_block.load_state_dict({"weights" : weights})
+    return transformer_block(in_features)
     
-    x = run_rmsnorm(
-        d_model,
-        1e-5,
-        weights['ln1.weight'],
-        in_features,
-    )
-    token_positions = torch.arange(in_features.shape[-2])[None, :]
-    attn1 = run_multihead_self_attention_with_rope(
-        d_model,
-        num_heads,
-        max_seq_len,
-        theta,
-        weights['attn.q_proj.weight'],
-        weights['attn.k_proj.weight'],
-        weights['attn.v_proj.weight'],
-        weights['attn.output_proj.weight'],
-        x,
-        token_positions,
-    )
-    ll1_out = in_features_orig + attn1    
-    ll1_out_orig = ll1_out.clone()
-    
-    x2 = run_rmsnorm(
-        d_model,
-        1e-5,
-        weights['ln2.weight'],
-        ll1_out,
-    )
-    ffn = run_swiglu(
-        d_model,
-        d_ff,
-        weights['ffn.w1.weight'],
-        weights['ffn.w2.weight'],
-        weights['ffn.w3.weight'],
-        x2,
-    )
-    return ffn + ll1_out_orig
 
 def run_transformer_lm(
     vocab_size: int,
@@ -501,7 +521,7 @@ def run_rmsnorm(
     #return in_features/(torch.sqrt(sumsq/d_model + eps)) * weights
     #return in_features/(torch.linalg.vector_norm(in_features, keepdim=True, dim=-1)/math.sqrt(d_model) + eps) * weights
     rmsNorm = RMSNorm(d_model, eps, weights.device, weights.dtype)
-    rmsNorm.load_state_dict({"w": weights})
+    rmsNorm.load_state_dict({"weight": weights})
     return rmsNorm(in_features)
     
 
