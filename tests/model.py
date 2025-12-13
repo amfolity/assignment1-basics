@@ -22,13 +22,13 @@ class Embedding(nn.Module):
 
     def __init__(self, num_embedding, embedding_dim, device=None, dtype=None):
         super().__init__()
-        self.embed = nn.Parameter(torch.empty(num_embedding, embedding_dim, device=device, dtype=dtype))
+        self.weight = nn.Parameter(torch.empty(num_embedding, embedding_dim, device=device, dtype=dtype))
         with torch.no_grad():
-            nn.init.trunc_normal_(self.embed)
+            nn.init.trunc_normal_(self.weight)
         
 
     def forward(self, token_ids: torch.Tensor):
-        return self.embed[token_ids]
+        return self.weight[token_ids]
 
 
 class RMSNorm(nn.Module):
@@ -215,6 +215,29 @@ class TransformerBlock(nn.Module):
         
         ffn = self.ffn(x2)
         return ffn + ll1_out_orig
+
+class TransformerLM(nn.Module):
+
+    def __init__(self, vocab_size, context_length, num_layers, d_model, d_ff, num_heads):
+        super().__init__()
+        
+        self.num_layers = num_layers
+
+        self.token_embeddings = Embedding(vocab_size, d_model)
+        self.layers = torch.nn.ModuleList([TransformerBlock(d_model, num_heads, d_ff) for _ in range(num_layers)])
+        self.ln_final = RMSNorm(d_model, 1e-5)
+        self.lm_head = Linear(d_model, vocab_size)
+        
+    def forward(self, in_indices: Int[Tensor, "batch_size sequence_length"]):
+
+        activations = self.token_embeddings(in_indices)
+ 
+        for i in range(self.num_layers):
+            activations = self.layers[i](activations)
+
+        activations = self.ln_final(activations)
+        activations = self.lm_head(activations)
+        return activations        
 
 
 

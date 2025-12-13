@@ -9,7 +9,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 import math
-from .model import (Linear, Embedding, RMSNorm, Pointwise_Feedforward, silu_act, RoPE, scaled_dot_product_attention, MultiHeadSelfAttention, TransformerBlock, MultiHeadSelfAttentionWithRope)
+from .model import (Linear, Embedding, RMSNorm, Pointwise_Feedforward, silu_act, RoPE, scaled_dot_product_attention, MultiHeadSelfAttention, TransformerBlock, MultiHeadSelfAttentionWithRope, TransformerLM)
 from .utils import softmax
 
 def run_linear(
@@ -91,8 +91,6 @@ def run_swiglu(
     swiglu.load_state_dict({"w1" : w1_weight, "w2" : w2_weight, "w3" : w3_weight})
     return swiglu(in_features)
     
-
-
 def run_scaled_dot_product_attention(
     Q: Float[Tensor, " ... queries d_k"],
     K: Float[Tensor, " ... keys d_k"],
@@ -150,9 +148,7 @@ def run_multihead_self_attention(
                                "v_proj.weight" : v_proj_weight, 
                                "o_proj.weight": o_proj_weight,
                               })
-    return attention(in_features)
-    
-
+    return attention(in_features)  
 
 def run_multihead_self_attention_with_rope(
     d_model: int,
@@ -198,7 +194,6 @@ def run_multihead_self_attention_with_rope(
                                "o_proj.weight": o_proj_weight,
                               })
     return attention(in_features, token_positions)    
-
 
 def run_rope(
     d_k: int,
@@ -292,51 +287,10 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-#    in_features_orig = in_features.clone()
-#    
-#    x = run_rmsnorm(
-#        d_model,
-#        1e-5,
-#        weights['ln1.weight'],
-#        in_features,
-#    )
-#    token_positions = torch.arange(in_features.shape[-2])[None, :]
-#    attn1 = run_multihead_self_attention_with_rope(
-#        d_model,
-#        num_heads,
-#        max_seq_len,
-#        theta,
-#        weights['attn.q_proj.weight'],
-#        weights['attn.k_proj.weight'],
-#        weights['attn.v_proj.weight'],
-#        weights['attn.output_proj.weight'],
-#        x,
-#        token_positions,
-#    )
-#    ll1_out = in_features_orig + attn1    
-#    ll1_out_orig = ll1_out.clone()
-#    
-#    x2 = run_rmsnorm(
-#        d_model,
-#        1e-5,
-#        weights['ln2.weight'],
-#        ll1_out,
-#    )
-#    ffn = run_swiglu(
-#        d_model,
-#        d_ff,
-#        weights['ffn.w1.weight'],
-#        weights['ffn.w2.weight'],
-#        weights['ffn.w3.weight'],
-#        x2,
-#    )
-#    return ffn + ll1_out_orig
-
     transformer_block = TransformerBlock(d_model, num_heads, d_ff)
     transformer_block.load_state_dict(weights)
     return transformer_block(in_features)
     
-
 def run_transformer_lm(
     vocab_size: int,
     context_length: int,
@@ -417,39 +371,9 @@ def run_transformer_lm(
         next-word distribution for each token.
     """
     
-    activations = run_embedding(
-        vocab_size,
-        d_model,
-        weights['token_embeddings.weight'],
-        in_indices)
-
-    
-    for i in range(num_layers):
-        
-        sub_dict = {'.'.join(k.split('.')[2:]) : v for k,v in weights.items() if k.split('.')[1] == str(i) }
-        
-        activations=run_transformer_block(d_model,
-        num_heads,
-        d_ff,
-        context_length,
-        rope_theta,
-        sub_dict,
-        activations
-        )
-    activations = run_rmsnorm(
-        d_model,
-        1e-5,
-        weights['ln_final.weight'],
-        activations,
-    )
-    activations = run_linear(
-    d_model,
-    vocab_size,
-    weights['lm_head.weight'],
-    activations,
-    )
-    #return run_softmax(activations, -1)
-    return activations
+    transformer_block = TransformerLM(vocab_size, context_length, num_layers, d_model, d_ff, num_heads)
+    transformer_block.load_state_dict(weights)
+    return transformer_block(in_indices)    
 
 def run_rmsnorm(
     d_model: int,
@@ -472,9 +396,6 @@ def run_rmsnorm(
         RMSNorm of the `in_features`.
     """
 
-    #sumsq = (in_features ** 2).sum(keepdim=True, dim=-1)
-    #return in_features/(torch.sqrt(sumsq/d_model + eps)) * weights
-    #return in_features/(torch.linalg.vector_norm(in_features, keepdim=True, dim=-1)/math.sqrt(d_model) + eps) * weights
     rmsNorm = RMSNorm(d_model, eps, weights.device, weights.dtype)
     rmsNorm.load_state_dict({"weight": weights})
     return rmsNorm(in_features)
