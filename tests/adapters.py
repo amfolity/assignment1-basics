@@ -10,7 +10,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 import math
 from .model import (Linear, Embedding, RMSNorm, Pointwise_Feedforward, silu_act, RoPE, scaled_dot_product_attention, MultiHeadSelfAttention, TransformerBlock, MultiHeadSelfAttentionWithRope, TransformerLM)
-from .utils import softmax
+from .utils import softmax, cross_entropy
 
 def run_linear(
     d_in: int,
@@ -469,7 +469,7 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    return 
+    return cross_entropy(inputs, targets)
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
