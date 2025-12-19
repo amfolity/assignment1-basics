@@ -10,7 +10,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 import math
 from .model import (Linear, Embedding, RMSNorm, Pointwise_Feedforward, silu_act, RoPE, scaled_dot_product_attention, MultiHeadSelfAttention, TransformerBlock, MultiHeadSelfAttentionWithRope, TransformerLM)
-from .utils import softmax, cross_entropy, Adamw
+from .utils import softmax, cross_entropy, Adamw, learning_rate_schedule, gradient_clipping
 
 def run_linear(
     d_in: int,
@@ -481,7 +481,7 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    gradient_clipping(parameters, max_l2_norm)
 
 
 def get_adamw_cls() -> Any:
@@ -517,7 +517,11 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    raise NotImplementedError
+    return learning_rate_schedule(it,
+    max_learning_rate,
+    min_learning_rate,
+    warmup_iters,
+    cosine_cycle_iters)
 
 
 def run_save_checkpoint(

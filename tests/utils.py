@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from jaxtyping import Bool, Float, Int
 from typing import Optional
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from torch import nn
 import math
 
@@ -61,6 +61,35 @@ class Adamw(torch.optim.Optimizer):
                 state['exp_avg_sq'] = exp_avg_sq
                 
                 state["t"] = t
+
+def learning_rate_schedule(
+    it: int,
+    max_learning_rate: float,
+    min_learning_rate: float,
+    warmup_iters: int,
+    cosine_cycle_iters: int,):
+    
+    if it < warmup_iters:
+        return (it/warmup_iters) * max_learning_rate
+    elif it >= warmup_iters and it <=  cosine_cycle_iters:
+        lr = min_learning_rate + 1/2 *(1 + math.cos(((it - warmup_iters)/(cosine_cycle_iters - warmup_iters)) * torch.pi))*(max_learning_rate - min_learning_rate)
+        return lr
+    else:
+        return min_learning_rate
+
+
+def gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float):
+    eps = 1e-6
+    norm = math.sqrt(sum([torch.linalg.matrix_norm(parameter.grad, ord='fro').item()**2 for parameter in parameters if parameter.grad is not None]))
+    for parameter in parameters:
+        if parameter.grad is None:
+            continue
+        if norm >= max_l2_norm:
+            parameter.grad.data *= max_l2_norm / (norm + eps)
+
+    
+        
+    
         
 
 
