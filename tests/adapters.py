@@ -10,7 +10,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 import math
 from .model import (Linear, Embedding, RMSNorm, Pointwise_Feedforward, silu_act, RoPE, scaled_dot_product_attention, MultiHeadSelfAttention, TransformerBlock, MultiHeadSelfAttentionWithRope, TransformerLM)
-from .utils import softmax, cross_entropy
+from .utils import softmax, cross_entropy, Adamw
 
 def run_linear(
     d_in: int,
@@ -488,7 +488,8 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    
+    return Adamw
 
 
 def run_get_lr_cosine_schedule(
