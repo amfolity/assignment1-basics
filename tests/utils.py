@@ -2,14 +2,17 @@ import torch
 from torch import Tensor
 from jaxtyping import Bool, Float, Int
 from typing import Optional
+import typing
 from collections.abc import Callable, Iterable
 from torch import nn
+import os
 import math
 
 def softmax(x: torch.Tensor, dimension_i : int) -> torch.Tensor:
     exps = torch.exp(x - torch.max(x, keepdim=True, dim=dimension_i)[0])
     summ = torch.sum(exps, dim=dimension_i, keepdim=True)
     return  exps/summ   
+
 
 def cross_entropy(inputs: Float[Tensor, " batch_size vocab_size"], targets: Int[Tensor, " batch_size"]):
     #inputs_ = inputs.view(-1, inputs.size(-1))
@@ -22,7 +25,7 @@ def cross_entropy(inputs: Float[Tensor, " batch_size vocab_size"], targets: Int[
 
 class Adamw(torch.optim.Optimizer):
 
-    def __init__(self, params, lr, betas, eps, weight_decay):
+    def __init__(self, params, lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01):
 
         defaults = {'lr':lr, 'betas':betas, 'eps':eps, 'weight_decay':weight_decay}
             
@@ -62,6 +65,7 @@ class Adamw(torch.optim.Optimizer):
                 
                 state["t"] = t
 
+
 def learning_rate_schedule(
     it: int,
     max_learning_rate: float,
@@ -80,12 +84,33 @@ def learning_rate_schedule(
 
 def gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float):
     eps = 1e-6
-    norm = math.sqrt(sum([torch.linalg.matrix_norm(parameter.grad, ord='fro').item()**2 for parameter in parameters if parameter.grad is not None]))
+    
+    norm = math.sqrt(sum([torch.linalg.matrix_norm(parameter.grad, ord=2).item()**2 for parameter in parameters if parameter.grad is not None and len(parameter.shape) >= 2]))
     for parameter in parameters:
         if parameter.grad is None:
             continue
         if norm >= max_l2_norm:
             parameter.grad.data *= max_l2_norm / (norm + eps)
+
+
+def save_checkpoint(model: torch.nn.Module, optimizer : torch.optim.Optimizer, iteration : int, out : str|os.PathLike|typing.BinaryIO|typing.IO[bytes]):
+    model_check = model.state_dict()
+    optim_check = optimizer.state_dict()
+    dic = {'model': model_check,
+          'optimizer': optim_check,
+          'iteration': iteration}
+    torch.save(dic, out)
+
+
+def load_checkpoint(src : str|os.PathLike, model, optimizer):
+    loaded_dic = torch.load(src)
+    model.load_state_dict(loaded_dic["model"])
+    optimizer.load_state_dict(loaded_dic["optimizer"])    
+    return loaded_dic["iteration"]
+    
+    
+    
+    
 
     
         

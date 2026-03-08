@@ -35,7 +35,7 @@ class RMSNorm(nn.Module):
 
     def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype = None):
         super().__init__()
-        self.weight = nn.Parameter(torch.empty(d_model, device=device, dtype=dtype))
+        self.weight = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
         self.d_model = d_model
         self.eps = eps
         self.device = device
@@ -205,7 +205,7 @@ class TransformerBlock(nn.Module):
 
         x_orig = x
         x = self.ln1(x)    
-        token_positions = torch.arange(x.shape[-2])[None, :]  
+        token_positions = torch.arange(x.shape[-2], device=x.device)[None, :]  
         
         attn1 = self.attn(x, token_positions)          
         ll1_out = x_orig + attn1    

@@ -47,13 +47,9 @@ class Tokenizer:
         
         
     def encode(self, text):
-        #pattern = "|".join(map(re.escape, special_tokens))
-        #result = re.split(pattern, text)
-        import re
 
         def split_bytes_except(words, text):
             # Convert keyword list to byte patterns, escape each one
-            #print("text", text)
             text = text.encode("utf-8")
             bwords = [re.escape(w.encode("utf-8")) for w in words] if words else []
         
@@ -66,7 +62,6 @@ class Tokenizer:
             
             tokens = []
             for m in re.finditer(pattern, text):
-                #print("m", m)
                 tokens.append(m.group(0))
             return tokens
 
@@ -79,7 +74,6 @@ class Tokenizer:
 
         
         splittext = split_bytes_except(self.special_tokens, text)
-        #print("splittest before", splittext) # "inverse dict", self.inverse_map
         new_splittext = []
         for merge in self.merges:
             part1, part2 = merge
@@ -92,7 +86,6 @@ class Tokenizer:
                     new_splittext.append(splittext[i])
                     i+=1
             splittext, new_splittext  = new_splittext, []
-        #print("\n" in splittext)
         
         return [self.inverse_map[word] for word in splittext]     
 
